@@ -23,10 +23,11 @@ A CloudFormation script to create a 3 Node Kubernetes Cluster based on Sander Va
         $ sudo -s
         $ export KUBECONFIG=/etc/kubernetes/admin.conf
         $ kubeadm token create --print-join-command
-4. Login to Worker using the above SSH command
+4. Obtain SSH command to connect to Worker:
 
         $ aws cloudformation describe-stacks --query "Stacks[*].Outputs[?OutputKey=='MasterSSH'].OutputValue" --output text
-5. Run the following commands:
+5. Login to master using the above SSH command
+6. Run the following commands:
 
         $ sudo -s
         $ (kubeadm join... obtained in Step#3)

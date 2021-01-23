@@ -1,5 +1,7 @@
 # k8s-cluster
-A CloudFormation script to create a 3 Node Kubernetes Cluster based on Sander Van Vugt Method.
+A CloudFormation script to create a 1 Node Kubernetes Cluster based on [Sander Van Vugt Method][1].
+
+[1]: https://github.com/sandervanvugt/cka
 
 # Pre-requisite:
 

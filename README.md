@@ -10,7 +10,7 @@ A CloudFormation script to create a 3 Node Kubernetes Cluster based on Sander Va
 
 # Create Master (Control Plane) and Worker (Data Plane)
 
-    $ aws cloudformation create-stack --capabilities CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM --template-body file://master.yml  --stack-name KubernetesMaster --parameters ParameterKey=KeyName,ParameterValue=<key_name>
+    $ aws cloudformation create-stack --capabilities CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM --template-body file://my.yml  --stack-name KubernetesMaster --parameters ParameterKey=KeyName,ParameterValue=<key_name>
 
 # Join Node
 

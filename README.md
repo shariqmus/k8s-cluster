@@ -15,6 +15,7 @@ A CloudFormation script to create a 3 Node Kubernetes Cluster based on Sander Va
 # Join Node
 
 1. Obtain SSH command to connect to Master:
+        
         $ aws cloudformation describe-stacks --query "Stacks[*].Outputs[?OutputKey=='MasterSSH'].OutputValue" --output text
 2. Login to master using the above SSH command
 3. Run command:

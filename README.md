@@ -30,4 +30,4 @@ A CloudFormation script to create a 3 Node Kubernetes Cluster based on Sander Va
 6. Run the following commands:
 
         $ sudo -s
-        $ (kubeadm join... obtained in Step#3)
+        $ kubeadm join... (obtained in Step#3)

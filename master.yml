@@ -1,0 +1,296 @@
+Description: >-
+  A CloudFormation script to create a Kubernetes Cluster based on Sander Van Vugt Method.
+
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  KeyName: 
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: sharmus-n-virginia
+
+  InstanceType: 
+    Type: String
+    Default: m5a.xlarge
+
+  AMI: 
+    Type: String
+    Default: ami-0affd4508a5d2481b      #Centos7
+
+Resources:
+
+# VPC ===============================================================
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 172.38.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+        VpcId: !Ref VPC
+        InternetGatewayId: !Ref InternetGateway
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 172.38.0.0/20
+      MapPublicIpOnLaunch: true
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 172.38.16.0/20
+      MapPublicIpOnLaunch: true
+
+  SubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 172.38.32.0/20
+      MapPublicIpOnLaunch: true
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+  InternetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref RouteTable
+
+  SubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref SubnetA
+
+  SubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref SubnetB
+
+  SubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref SubnetC
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "Internet Group"
+      GroupDescription: "SSH traffic in, all traffic out."
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+# Kubernetes Master ===============================================================
+
+  KubernetesMaster:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AMI
+      KeyName: !Ref KeyName
+      InstanceType: !Ref InstanceType
+      Tags:
+        - Key: Name
+          Value: Kubernetes Master
+        - Key: auto-delete
+          Value: never
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet: 
+            - Ref: MasterSecurityGroup
+          SubnetId: 
+            Ref: SubnetA
+      UserData: !Base64
+        'Fn::Join':
+          - ''
+          - - |
+              #!/bin/bash -x              
+              yum update -y
+              yum install -y epel-release
+              yum install -y https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.amzn1.noarch.rpm
+              ln -s /usr/local/lib/python2.7/site-packages/cfnbootstrap /usr/lib/python2.7/site-packages/cfnbootstrap
+            - |
+              # Install the files and packages from the metadata
+            - '/opt/aws/bin/cfn-init -v '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource KubernetesMaster '
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - "\n"
+            - |+
+              yum -y install vim git bash-completion
+              echo control.example.com > /etc/hostname
+              hostnamectl set-hostname --static control.example.com
+              git clone https://github.com/sandervanvugt/cka
+              cd cka
+              ./setup-docker.sh
+              ./setup-kubetools.sh
+              systemctl enable --now docker            
+              sleep 5
+              kubeadm init
+              export KUBECONFIG=/etc/kubernetes/admin.conf
+              kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')" 
+            - |
+              # Signal the status from cfn-init
+            - '/opt/aws/bin/cfn-signal -e $? '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource KubernetesMaster '
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - |
+
+  MasterSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow connecting via HTTP and SSH
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 6443
+        ToPort: 6443
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: udp
+        FromPort: 6783
+        ToPort: 6784
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 6783
+        ToPort: 6783
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: -1
+        CidrIp: 0.0.0.0/0
+
+  MasterSecurityGroupIngress:
+   Type: 'AWS::EC2::SecurityGroupIngress'
+   Properties:
+      GroupId: !Ref MasterSecurityGroup
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !GetAtt WorkerSecurityGroup.GroupId
+
+
+# Kubernetes Worker ===============================================================
+
+  KubernetesWorker:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+    Properties:
+      ImageId: !Ref AMI
+      KeyName: !Ref KeyName
+      InstanceType: !Ref InstanceType
+      Tags:
+        - Key: Name
+          Value: Kubernetes Worker
+        - Key: auto-delete
+          Value: never
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet: 
+            - Ref: WorkerSecurityGroup
+          SubnetId: 
+            Ref: SubnetA
+      UserData: !Base64
+        'Fn::Join':
+          - ''
+          - - |
+              #!/bin/bash -x              
+              yum update -y
+              yum install -y epel-release
+              yum install -y https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.amzn1.noarch.rpm
+              ln -s /usr/local/lib/python2.7/site-packages/cfnbootstrap /usr/lib/python2.7/site-packages/cfnbootstrap
+            - |
+              # Install the files and packages from the metadata
+            - '/opt/aws/bin/cfn-init -v '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource KubernetesWorker '
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - "\n"
+            - |+
+              yum -y install vim git bash-completion
+              echo worker1.example.com > /etc/hostname
+              hostnamectl set-hostname --static worker1.example.com
+              git clone https://github.com/sandervanvugt/cka
+              cd cka
+              ./setup-docker.sh
+              ./setup-kubetools.sh
+              systemctl enable --now docker    
+            - |
+              # Signal the status from cfn-init
+            - '/opt/aws/bin/cfn-signal -e $? '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource KubernetesWorker '
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - |
+
+  WorkerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow connecting via SSH
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: -1
+        CidrIp: 0.0.0.0/0
+
+  WorkerSecurityGroupIngress:
+   Type: 'AWS::EC2::SecurityGroupIngress'
+   Properties:
+      GroupId: !Ref WorkerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !GetAtt MasterSecurityGroup.GroupId
+
+# Outputs ===============================================================
+
+Outputs:
+
+  MasterSSH:
+    Description: SSH Connection command for Kubernetes Master
+    Value: !Join [ "", [ "ssh -i ", !Ref KeyName, ".pem centos@", !GetAtt KubernetesMaster.PublicDnsName ] ] 
+
+  WorketSSH:
+    Description: SSH Connection command for Kubernetes Worker
+    Value: !Join [ "", [ "ssh -i ", !Ref KeyName, ".pem centos@", !GetAtt KubernetesWorker.PublicDnsName ] ] 

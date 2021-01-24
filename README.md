@@ -34,3 +34,10 @@ A CloudFormation script to create a 1 Node Kubernetes Cluster based on [Sander V
 
         $ sudo -s
         $ kubeadm join... (obtained in Step#3)
+
+# Troubleshooting
+
+If after kubeadm join, the nodes remain "NotReady', run the following command in Master:
+
+        $ export KUBECONFIG=/etc/kubernetes/admin.conf
+        $ kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')" 

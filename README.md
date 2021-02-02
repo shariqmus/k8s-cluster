@@ -8,8 +8,8 @@ A CloudFormation script to create a 1 Node Kubernetes Cluster based on [Sander V
 1. Install and configure AWS CLI
 2. Set correct region for AWS CLI
    
-        export AWS_REGION="$@" 
-        export AWS_DEFAULT_REGION="$@" 
+        export AWS_REGION="us-east-1" 
+        export AWS_DEFAULT_REGION="us-east1" 
 
 # Create Master (Control Plane) and Worker (Data Plane)
 
